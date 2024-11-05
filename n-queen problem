@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>N皇后问题可视化</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+        }
+        
+        .board {
+            display: inline-block;
+            border: 2px solid #333;
+        }
+        
+        .row {
+            display: flex;
+        }
+        
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            transition: background-color 0.3s;
+        }
+        
+        .cell.white { background-color: #fff; }
+        .cell.black { background-color: #ddd; }
+        .cell.queen { color: red; }
+        .cell.checking { background-color: #ffeb3b; }
+        .cell.invalid { background-color: #ff5252; }
+        
+        .solutions {
+            margin-top: 20px;
+        }
+        
+        .solution-board {
+            display: inline-block;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>N皇后问题可视化</h1>
+        <div class="controls">
+            <label>选择大小 (1-8): </label>
+            <input type="number" id="boardSize" min="1" max="8" value="4">
+            <button id="solve">求解</button>
+            <button id="next">下一步</button>
+            <button id="auto">自动演示</button>
+            <span id="status"></span>
+        </div>
+        <div id="mainBoard" class="board"></div>
+        <div class="solutions">
+            <h2>所有解法：</h2>
+            <div id="allSolutions"></div>
+        </div>
+    </div>
+
+    <script>
+        class QueensSolver {
+            constructor(n) {
+                this.n = n;
+                this.board = Array(n).fill().map(() => Array(n).fill('.'));
+                this.solutions = [];
+                this.currentRow = 0;
+                this.currentCol = 0;
+                this.isRunning = false;
+            }
+
+            isValid(row, col) {
+                // 检查同一列
+                for (let i = 0; i < row; i++) {
+                    if (this.board[i][col] === 'Q') return false;
+                }
+                
+                // 检查左上对角线
+                for (let i = row - 1, j = col - 1; i >= 0 && j >= 0; i--, j--) {
+                    if (this.board[i][j] === 'Q') return false;
+                }
+                
+                // 检查右上对角线
+                for (let i = row - 1, j = col + 1; i >= 0 && j < this.n; i--, j++) {
+                    if (this.board[i][j] === 'Q') return false;
+                }
+                
+                return true;
+            }
+
+            async step() {
+                if (this.currentRow === this.n) {
+                    this.solutions.push(this.board.map(row => [...row]));
+                    return true;
+                }
+
+                if (this.currentCol >= this.n) {
+                    this.currentCol = 0;
+                    this.currentRow--;
+                    return false;
+                }
+
+                await this.visualizeCheck(this.currentRow, this.currentCol);
+
+                if (this.isValid(this.currentRow, this.currentCol)) {
+                    this.board[this.currentRow][this.currentCol] = 'Q';
+                    await this.visualizeBoard();
+                    this.currentRow++;
+                    this.currentCol = 0;
+                } else {
+                    this.currentCol++;
+                }
+
+                return false;
+            }
+
+            async visualizeCheck(row, col) {
+                const cell = document.querySelector(`#mainBoard .cell[data-row="${row}"][data-col="${col}"]`);
+                cell.classList.add('checking');
+                await new Promise(resolve => setTimeout(resolve, 200));
+                cell.classList.remove('checking');
+            }
+
+            async visualizeBoard() {
+                updateBoard(this.board);
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        let solver = null;
+        let autoInterval = null;
+
+        function createBoard(n, container, board = null) {
+            container.innerHTML = '';
+            for (let i = 0; i < n; i++) {
+                const row = document.createElement('div');
+                row.className = 'row';
+                for (let j = 0; j < n; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(i + j) % 2 ? 'black' : 'white'}`;
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    if (board && board[i][j] === 'Q') {
+                        cell.textContent = '♕';
+                        cell.classList.add('queen');
+                    }
+                    row.appendChild(cell);
+                }
+                container.appendChild(row);
+            }
+        }
+
+        function updateBoard(board) {
+            const cells = document.querySelectorAll('#mainBoard .cell');
+            cells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                cell.textContent = board[row][col] === 'Q' ? '♕' : '';
+                cell.classList.toggle('queen', board[row][col] === 'Q');
+            });
+        }
+
+        function showSolutions(solutions) {
+            const container = document.getElementById('allSolutions');
+            container.innerHTML = '';
+            solutions.forEach((solution, index) => {
+                const boardDiv = document.createElement('div');
+                boardDiv.className = 'solution-board';
+                boardDiv.innerHTML = `<div>解法 ${index + 1}</div>`;
+                createBoard(solution.length, boardDiv, solution);
+                container.appendChild(boardDiv);
+            });
+        }
+
+        document.getElementById('solve').addEventListener('click', () => {
+            const n = parseInt(document.getElementById('boardSize').value);
+            const mainBoard = document.getElementById('mainBoard');
+            createBoard(n, mainBoard);
+            solver = new QueensSolver(n);
+            document.getElementById('status').textContent = '开始求解...';
+        });
+
+        document.getElementById('next').addEventListener('click', async () => {
+            if (!solver || solver.isRunning) return;
+            solver.isRunning = true;
+            const isDone = await solver.step();
+            solver.isRunning = false;
+            if (isDone) {
+                showSolutions(solver.solutions);
+                document.getElementById('status').textContent = `找到 ${solver.solutions.length} 个解法`;
+            }
+        });
+
+        document.getElementById('auto').addEventListener('click', function() {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+                this.textContent = '自动演示';
+                return;
+            }
+
+            this.textContent = '停止';
+            autoInterval = setInterval(async () => {
+                if (!solver || solver.isRunning) return;
+                solver.isRunning = true;
+                const isDone = await solver.step();
+                solver.isRunning = false;
+                if (isDone) {
+                    clearInterval(autoInterval);
+                    autoInterval = null;
+                    this.textContent = '自动演示';
+                    showSolutions(solver.solutions);
+                    document.getElementById('status').textContent = `找到 ${solver.solutions.length} 个解法`;
+                }
+            }, 500);
+        });
+
+        // 初始化4皇后问题
+        document.getElementById('solve').click();
+    </script>
+</body>
+</html>
